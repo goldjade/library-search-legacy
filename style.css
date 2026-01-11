@@ -1,0 +1,200 @@
+/* 기본 */
+body {
+  margin: 0;
+  font-family: Arial, "맑은 고딕", sans-serif;
+  background: #fff;
+  color: #222;
+}
+.container {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 16px;
+}
+.header {
+  margin-bottom: 12px;
+}
+.title {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.subtitle {
+  margin: 6px 0;
+  font-size: 13px;
+  color: #555;
+}
+
+.card {
+  border: 1px solid #eee;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 12px 0;
+}
+.controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #444;
+}
+.grow {
+  flex: 1;
+  min-width: 180px;
+}
+
+.select,
+.input {
+  height: 34px;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.button {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #ddd;
+  background: #f6f6f6;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.error {
+  margin-top: 10px;
+  padding: 10px;
+  background: #fff2f2;
+  border: 1px solid #ffd0d0;
+  color: #a40000;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.metaRow {
+  margin-top: 10px;
+}
+.meta {
+  font-size: 13px;
+  color: #444;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table th,
+.table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  font-size: 13px;
+}
+.table th {
+  background: #fafafa;
+}
+
+/* ✅ 짝수줄 배경 */
+.table tbody tr:nth-child(even) {
+  background: #f7f7f7;
+}
+
+/* ✅ hover: 굵기 변경 금지(일렁임 방지) */
+.table tbody tr:hover {
+  background: #ececec;
+}
+
+.empty {
+  text-align: center;
+  color: #666;
+  padding: 18px 8px;
+}
+
+.pager {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.pagerBtn {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.pagerBtn[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.pagerInfo {
+  font-size: 13px;
+  color: #444;
+}
+
+.footer {
+  margin-top: 16px;
+  padding: 12px;
+  border-top: 1px solid #eee;
+  text-align: center;
+}
+.footerCopy {
+  color: #888;
+  font-size: 12px;
+}
+
+/* ✅ 툴팁 */
+.subRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tooltipWrapper {
+  position: relative;
+  display: inline-block;
+  margin-left: 4px;
+}
+.tooltipIcon {
+  cursor: pointer;
+  font-size: 0.9em;
+  color: #666;
+}
+.tooltip {
+  position: absolute;
+  bottom: 130%;
+  left: 50%;
+  margin-left: -110px; /* 구형 브라우저용: transform 대신 대략 중앙 */
+  width: 220px;
+  background: #333;
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  display: none; /* 기본 숨김 */
+  z-index: 10;
+}
+
+/* hover 가능한 기기는 hover로 표시 */
+.tooltipWrapper:hover .tooltip {
+  display: block;
+}
+
+/* ✅ 모바일에서 컬럼 줄이기: 저자/출판사 숨김 */
+@media (max-width: 640px) {
+  .col-author,
+  .col-pub {
+    display: none;
+  }
+}
