@@ -3,9 +3,18 @@
 (function () {
   var PAGE_SIZE = 10;
 
-  var CSV_BY_SITE = {
-    3: "./books_3.csv",
-    4: "./books_4.csv",
+  var GOOGLE_SHEET_ID = "1bLgsEAx6s_V7bJJY8cJMTvS2bHQbZue1jAO-e9fJgyU";
+
+  // 공개 Google Sheets의 각 탭을 CSV 형식으로 불러온다.
+  var CSV_URL_BY_SITE = {
+    3:
+      "https://docs.google.com/spreadsheets/d/" +
+      GOOGLE_SHEET_ID +
+      "/gviz/tq?tqx=out:csv&gid=1180448183",
+    4:
+      "https://docs.google.com/spreadsheets/d/" +
+      GOOGLE_SHEET_ID +
+      "/gviz/tq?tqx=out:csv&gid=1285026582",
   };
 
   var LOAN_DAYS_BY_SITE = {
@@ -197,11 +206,17 @@
     if (!site) return done(new Error("site required"));
     if (cache[site]) return done(null, cache[site]);
 
-    var url = CSV_BY_SITE[site];
-    if (!url) return done(new Error("CSV 설정이 없습니다."));
+    var csvUrl = CSV_URL_BY_SITE[site];
+    if (!csvUrl) return done(new Error("Google Sheets CSV 설정이 없습니다."));
+
+    // 브라우저 캐시 대신 Google Sheets의 최신 데이터를 요청한다.
+    var url = csvUrl + "&cacheBust=" + new Date().getTime();
 
     xhrGet(url, function (err, text) {
-      if (err) return done(new Error("CSV 로드 실패: " + err.message));
+      if (err)
+        return done(
+          new Error("Google Sheets 장서 목록 로드 실패: " + err.message)
+        );
 
       var rows = parseCSV(text);
       var objs = rowsToObjects(rows);
