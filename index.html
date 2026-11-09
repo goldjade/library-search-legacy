@@ -1,106 +1,71 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
-    <!-- 구형 기기 대응: viewport 최소 -->
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>작은도서관 장서 검색(레거시)</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div class="container">
+    <main class="container">
       <header class="header">
-        <h1 id="title" class="title">작은도서관 장서 검색</h1>
-
-        <div class="subRow">
-          <div class="subtitle" id="loanInfo" style="display: none"></div>
-
-          <span class="tooltipWrapper" id="tipWrap" style="display: none">
-            <span class="tooltipIcon" id="tipIcon">ⓘ</span>
-            <span class="tooltip" id="tipBox">
-              도서관은 주말에 운영하지 않습니다.<br />
-              금요일 대출 시 반납일은 다음 주 월요일 기준으로 안내됩니다.
-            </span>
-          </span>
-        </div>
-
-        <p class="subtitle" id="countInfo">도서관을 선택한 뒤 검색해 주세요.</p>
+        <h1 class="title">작은도서관 장서 검색</h1>
+        <p class="subtitle">우리 동네 작은도서관의 책을 검색해 보세요.</p>
       </header>
-
-      <section class="card">
-        <div class="controls">
-          <label class="label">
-            도서관 선택(필수)
-            <select id="siteSelect" class="select">
-              <option value="">선택해주세요</option>
-              <option value="3">3단지 도서관</option>
-              <option value="4">4단지 도서관</option>
-            </select>
+      <section class="searchSection">
+        <div id="loadErrorBox" class="error" style="display: none"></div>
+        <div class="optionRow">
+          <div class="segment siteSegment" aria-label="도서관 선택">
+            <button class="segmentButton active" data-site="4">4단지</button>
+            <button class="segmentButton" data-site="3">3단지</button>
+          </div>
+          <div class="segment fieldSegment" aria-label="검색 대상">
+            <button class="segmentButton active" data-field="서명">도서명</button>
+            <button class="segmentButton" data-field="저자">저자</button>
+            <button class="segmentButton" data-field="출판사">출판사</button>
+          </div>
+        </div>
+        <div class="searchRow">
+          <label class="searchInputWrap">
+            <span class="searchIcon" aria-hidden="true">⌕</span>
+            <input id="queryInput" class="input" type="text" placeholder="책 제목이나 작가를 입력하세요" />
           </label>
-
-          <label class="label">
-            검색 대상
-            <select id="fieldSelect" class="select">
-              <option value="서명">서명</option>
-              <option value="저자">작가명(저자)</option>
-              <option value="출판사">출판사</option>
-            </select>
-          </label>
-
-          <label class="label grow">
-            검색어
-            <input
-              id="queryInput"
-              class="input"
-              type="text"
-              placeholder="한 글자 이상 입력 (띄어쓰기 무시)"
-            />
-          </label>
-
           <button id="searchBtn" class="button">검색</button>
         </div>
-
         <div id="errorBox" class="error" style="display: none"></div>
-        <div id="loadErrorBox" class="error" style="display: none"></div>
-
-        <div class="metaRow">
-          <div class="meta" id="resultInfo">검색 결과: 0권</div>
+        <div class="statsPanel">
+          <div class="statItem">
+            <span class="statLabel"><span class="accentIcon">▰</span> 총 장서</span>
+            <strong id="countValue" class="statValue">불러오는 중</strong>
+          </div>
+          <div class="statItem dueStat">
+            <span class="statLabel"><span class="sageIcon">▣</span> 반납 예정일</span>
+            <strong id="dueDateValue" class="statValue">-</strong>
+            <span class="dueNote">ⓘ 휴관일인 경우 익일 반납 · 표시된 날짜는 실제 반납일과 다를 수 있습니다.</span>
+          </div>
         </div>
       </section>
-
-      <section class="card">
+      <section class="resultsSection">
+        <div class="resultsHeading">
+          <h2 id="resultCount">검색 결과 0권</h2>
+          <span id="resultMeta">4단지 · 검색어: 전체 · 검색 대상: 도서명</span>
+        </div>
         <div class="tableWrap">
           <table class="table" id="resultTable">
-            <thead>
-              <tr>
-                <th>서명</th>
-                <th class="col-author">저자</th>
-                <th class="col-pub">출판사</th>
-                <th>청구기호</th>
-              </tr>
-            </thead>
-            <tbody id="tbody">
-              <tr>
-                <td class="empty" colspan="4">
-                  도서관을 선택하고 검색해 주세요.
-                </td>
-              </tr>
-            </tbody>
+            <thead><tr><th>서명</th><th class="col-author">저자</th><th class="col-pub">출판사</th><th>청구기호</th></tr></thead>
+            <tbody id="tbody"><tr><td class="empty" colspan="4">불러오는 중…</td></tr></tbody>
           </table>
         </div>
-
-        <div class="pager" id="pager" style="display: none">
-          <button class="pagerBtn" id="prevBtn">이전</button>
-          <div class="pagerInfo" id="pageInfo">1 / 1</div>
-          <button class="pagerBtn" id="nextBtn">다음</button>
-        </div>
+        <div class="pager" id="pager" style="display: none"></div>
       </section>
-
       <footer class="footer">
-        <small class="footerCopy"> 레거시(구형 기기) 전용 페이지입니다. </small>
+        <div class="footerLinks">
+          <a class="footerLink" href="https://www.instagram.com/hy_lha4_lib/" target="_blank" rel="noopener noreferrer">📷 4단지 작은도서관 인스타그램</a>
+          <a class="footerLink" href="https://band.us/@hytree4lib" target="_blank" rel="noopener noreferrer">👥 4단지 작은도서관 밴드</a>
+        </div>
+        <small class="footerCopy">레거시(구형 기기) 전용 페이지입니다.</small>
       </footer>
-    </div>
-
+    </main>
     <script src="./app.js"></script>
   </body>
 </html>

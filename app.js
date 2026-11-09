@@ -1,488 +1,198 @@
-/* global window, document */
-
+/* global window, document, XMLHttpRequest */
 (function () {
+  "use strict";
+
   var PAGE_SIZE = 10;
-
   var GOOGLE_SHEET_ID = "1bLgsEAx6s_V7bJJY8cJMTvS2bHQbZue1jAO-e9fJgyU";
-
-  // 공개 Google Sheets의 각 탭을 CSV 형식으로 불러온다.
   var CSV_URL_BY_SITE = {
-    3:
-      "https://docs.google.com/spreadsheets/d/" +
-      GOOGLE_SHEET_ID +
-      "/gviz/tq?tqx=out:csv&gid=1180448183",
-    4:
-      "https://docs.google.com/spreadsheets/d/" +
-      GOOGLE_SHEET_ID +
-      "/gviz/tq?tqx=out:csv&gid=1285026582",
+    3: "https://docs.google.com/spreadsheets/d/" + GOOGLE_SHEET_ID + "/gviz/tq?tqx=out:csv&gid=1180448183",
+    4: "https://docs.google.com/spreadsheets/d/" + GOOGLE_SHEET_ID + "/gviz/tq?tqx=out:csv&gid=1285026582"
   };
-
-  var LOAN_DAYS_BY_SITE = {
-    3: 7,
-    4: 14,
-  };
-
+  var LOAN_DAYS_BY_SITE = { 3: 7, 4: 14 };
+  var FIELD_LABELS = { "서명": "도서명", "저자": "저자", "출판사": "출판사" };
   var cache = { 3: null, 4: null };
+  var state = { site: "4", field: "서명", query: "", submittedQuery: "", currentPage: 1, filtered: [], loading: false };
 
-  var siteSelect = document.getElementById("siteSelect");
-  var fieldSelect = document.getElementById("fieldSelect");
   var queryInput = document.getElementById("queryInput");
   var searchBtn = document.getElementById("searchBtn");
-
-  var titleEl = document.getElementById("title");
-  var countInfo = document.getElementById("countInfo");
-  var resultInfo = document.getElementById("resultInfo");
-
   var errorBox = document.getElementById("errorBox");
   var loadErrorBox = document.getElementById("loadErrorBox");
-
+  var countValue = document.getElementById("countValue");
+  var dueDateValue = document.getElementById("dueDateValue");
+  var resultCount = document.getElementById("resultCount");
+  var resultMeta = document.getElementById("resultMeta");
   var tbody = document.getElementById("tbody");
   var pager = document.getElementById("pager");
-  var prevBtn = document.getElementById("prevBtn");
-  var nextBtn = document.getElementById("nextBtn");
-  var pageInfo = document.getElementById("pageInfo");
+  var siteButtons = document.querySelectorAll("[data-site]");
+  var fieldButtons = document.querySelectorAll("[data-field]");
 
-  var loanInfo = document.getElementById("loanInfo");
-  var tipWrap = document.getElementById("tipWrap");
-  var tipIcon = document.getElementById("tipIcon");
-  var tipBox = document.getElementById("tipBox");
-
-  var state = {
-    site: "",
-    field: "서명",
-    query: "",
-    submittedQuery: "",
-    currentPage: 1,
-    filtered: [],
-  };
-
-  function show(el) {
-    el.style.display = "";
-  }
-  function hide(el) {
-    el.style.display = "none";
+  function trim(value) { return (value == null ? "" : String(value)).replace(/^\s+|\s+$/g, ""); }
+  function normalize(value) { return trim(value).toLowerCase().replace(/\s+/g, " "); }
+  function normalizeNoSpace(value) { return normalize(value).replace(/\s+/g, ""); }
+  function addDays(date, days) { var next = new Date(date.getTime()); next.setDate(next.getDate() + days); return next; }
+  function formatDate(date) { return (date.getMonth() + 1) + "월 " + date.getDate() + "일"; }
+  function show(el) { el.style.display = ""; }
+  function hide(el) { el.style.display = "none"; }
+  function setMessage(el, message) { el.innerHTML = escapeHtml(message || ""); message ? show(el) : hide(el); }
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
-  function setError(msg) {
-    if (msg) {
-      errorBox.innerHTML = msg;
-      show(errorBox);
-    } else {
-      errorBox.innerHTML = "";
-      hide(errorBox);
-    }
-  }
-
-  function setLoadError(msg) {
-    if (msg) {
-      loadErrorBox.innerHTML = msg;
-      show(loadErrorBox);
-    } else {
-      loadErrorBox.innerHTML = "";
-      hide(loadErrorBox);
-    }
-  }
-
-  function trim(s) {
-    return (s || "").replace(/^\s+|\s+$/g, "");
-  }
-
-  function normalizeBase(s) {
-    s = s == null ? "" : String(s);
-    s = trim(s).toLowerCase();
-    // 연속 공백 하나로
-    s = s.replace(/\s+/g, " ");
-    return s;
-  }
-
-  function normalizeNoSpace(s) {
-    return normalizeBase(s).replace(/\s+/g, "");
-  }
-
-  function pad2(n) {
-    n = String(n);
-    return n.length === 1 ? "0" + n : n;
-  }
-
-  // Intl 없는 구형 대비: YYYY.MM.DD(요일은 생략)
-  function formatDate(d) {
-    return (
-      d.getFullYear() + "." + pad2(d.getMonth() + 1) + "." + pad2(d.getDate())
-    );
-  }
-
-  function addDays(date, days) {
-    var d = new Date(date.getTime());
-    d.setDate(d.getDate() + days);
-    return d;
-  }
-
-  // 아주 단순 CSV 파서: 큰따옴표 포함 케이스도 어느 정도 처리
   function parseCSV(text) {
-    // BOM 제거
-    if (text && text.charCodeAt(0) === 65279) {
-      text = text.slice(1);
-    }
-
-    var rows = [];
-    var i, ch;
-    var row = [];
-    var field = "";
-    var inQuotes = false;
-
+    if (text && text.charCodeAt(0) === 65279) text = text.slice(1);
+    var rows = [], row = [], field = "", quoted = false, i, ch;
     for (i = 0; i < text.length; i++) {
       ch = text.charAt(i);
-
-      if (inQuotes) {
-        if (ch === '"') {
-          // "" -> "
-          if (i + 1 < text.length && text.charAt(i + 1) === '"') {
-            field += '"';
-            i++;
-          } else {
-            inQuotes = false;
-          }
-        } else {
-          field += ch;
-        }
-      } else {
-        if (ch === '"') {
-          inQuotes = true;
-        } else if (ch === ",") {
-          row.push(field);
-          field = "";
-        } else if (ch === "\n") {
-          row.push(field);
-          rows.push(row);
-          row = [];
-          field = "";
-        } else if (ch === "\r") {
-          // ignore
-        } else {
-          field += ch;
-        }
-      }
+      if (quoted) {
+        if (ch === '"' && text.charAt(i + 1) === '"') { field += '"'; i++; }
+        else if (ch === '"') quoted = false;
+        else field += ch;
+      } else if (ch === '"') quoted = true;
+      else if (ch === ",") { row.push(field); field = ""; }
+      else if (ch === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+      else if (ch !== "\r") field += ch;
     }
-
-    // 마지막 필드/행
-    row.push(field);
-    rows.push(row);
-
+    row.push(field); rows.push(row);
     return rows;
   }
 
-  function rowsToObjects(rows) {
-    if (!rows || rows.length < 2) return [];
-    var header = rows[0];
-    var list = [];
-    var r, i;
+  function mapRows(rows) {
+    if (!rows.length) return [];
+    var headers = rows[0], books = [], r, c, item, line, cls, authorKey;
     for (r = 1; r < rows.length; r++) {
-      var line = rows[r];
-      // 빈 줄 skip (서명/저자/출판사 전부 비었으면)
-      if (!line || line.length === 0) continue;
-
-      var obj = { __id: "r" + r };
-      for (i = 0; i < header.length; i++) {
-        obj[header[i]] = i < line.length ? line[i] : "";
-      }
-      list.push(obj);
+      line = rows[r]; item = {};
+      for (c = 0; c < headers.length; c++) item[headers[c]] = line[c] || "";
+      if (!trim(item["서명"]) && !trim(item["저자"]) && !trim(item["출판사"])) continue;
+      cls = trim(item["분류기호"]); authorKey = trim(item["저자기호"]);
+      books.push({ id: "r" + r, "서명": trim(item["서명"]), "저자": trim(item["저자"]), "출판사": trim(item["출판사"]), "청구기호": trim(cls + (cls && authorKey ? " " : "") + authorKey) });
     }
-    return list;
+    return books;
   }
 
-  function xhrGet(url, cb) {
+  function setLoading(loading) {
+    var i;
+    state.loading = loading;
+    searchBtn.disabled = loading;
+    queryInput.disabled = loading;
+    for (i = 0; i < siteButtons.length; i++) siteButtons[i].disabled = loading;
+    for (i = 0; i < fieldButtons.length; i++) fieldButtons[i].disabled = loading;
+    if (loading) countValue.innerHTML = "불러오는 중";
+  }
+
+  function loadSite(site, done) {
+    if (cache[site]) { done(null, cache[site]); return; }
     var xhr = new XMLHttpRequest();
-    xhr.open("GET", url, true);
+    xhr.open("GET", CSV_URL_BY_SITE[site] + "&cacheBust=" + new Date().getTime(), true);
     xhr.onreadystatechange = function () {
-      if (xhr.readyState === 4) {
-        if (xhr.status >= 200 && xhr.status < 300) cb(null, xhr.responseText);
-        else cb(new Error("HTTP " + xhr.status));
-      }
+      if (xhr.readyState !== 4) return;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        cache[site] = mapRows(parseCSV(xhr.responseText));
+        done(null, cache[site]);
+      } else done(new Error("Google Sheets 장서 목록을 불러오지 못했습니다. (HTTP " + xhr.status + ")"));
     };
     xhr.send(null);
   }
 
-  function loadSiteIfNeeded(site, done) {
-    if (!site) return done(new Error("site required"));
-    if (cache[site]) return done(null, cache[site]);
-
-    var csvUrl = CSV_URL_BY_SITE[site];
-    if (!csvUrl) return done(new Error("Google Sheets CSV 설정이 없습니다."));
-
-    // 브라우저 캐시 대신 Google Sheets의 최신 데이터를 요청한다.
-    var url = csvUrl + "&cacheBust=" + new Date().getTime();
-
-    xhrGet(url, function (err, text) {
-      if (err)
-        return done(
-          new Error("Google Sheets 장서 목록 로드 실패: " + err.message)
-        );
-
-      var rows = parseCSV(text);
-      var objs = rowsToObjects(rows);
-
-      // 필요한 값만 매핑 + 청구기호 합치기
-      var mapped = [];
-      var i;
-      for (i = 0; i < objs.length; i++) {
-        var o = objs[i];
-
-        var title = trim(o["서명"] || "");
-        var author = trim(o["저자"] || "");
-        var pub = trim(o["출판사"] || "");
-
-        var cls = trim(o["분류기호"] || "");
-        var authKey = trim(o["저자기호"] || "");
-        var callNo = trim(
-          (cls ? cls : "") +
-            (cls && authKey ? " " : "") +
-            (authKey ? authKey : "")
-        );
-
-        mapped.push({
-          id: o.__id,
-          서명: title,
-          저자: author,
-          출판사: pub,
-          청구기호: callNo,
-        });
-      }
-
-      cache[site] = mapped;
-      done(null, mapped);
-    });
-  }
-
-  function renderHeader() {
-    if (state.site) {
-      titleEl.innerHTML = state.site + "단지 작은도서관 장서 검색";
-      countInfo.innerHTML =
-        "총 장서량: " +
-        (cache[state.site] ? cache[state.site].length : 0) +
-        "권";
-    } else {
-      titleEl.innerHTML = "작은도서관 장서 검색";
-      countInfo.innerHTML = "도서관을 선택한 뒤 검색해 주세요.";
+  function updateButtons(buttons, attribute, value) {
+    var i;
+    for (i = 0; i < buttons.length; i++) {
+      if (buttons[i].getAttribute(attribute) === value) buttons[i].className = "segmentButton active";
+      else buttons[i].className = "segmentButton";
     }
   }
 
-  function renderLoanInfo() {
-    if (!state.site) {
-      hide(loanInfo);
-      hide(tipWrap);
-      return;
-    }
-
-    var today = new Date();
-    var days = LOAN_DAYS_BY_SITE[state.site] || 14;
-    var due = addDays(today, days);
-
-    loanInfo.innerHTML =
-      "오늘(" +
-      formatDate(today) +
-      ") 대출 시 반납일: " +
-      "<b>" +
-      formatDate(due) +
-      "</b>";
-    show(loanInfo);
-    show(tipWrap);
+  function renderStats() {
+    if (!state.loading) countValue.innerHTML = cache[state.site] ? cache[state.site].length.toLocaleString() + "권" : "0권";
+    dueDateValue.innerHTML = formatDate(addDays(new Date(), LOAN_DAYS_BY_SITE[state.site] || 14));
   }
 
   function filterBooks() {
-    var q = normalizeBase(state.submittedQuery);
-    if (!q) return [];
-
-    var qNo = normalizeNoSpace(state.submittedQuery);
-    var field = state.field;
-
-    var list = cache[state.site] || [];
-    var out = [];
-    var i;
-    for (i = 0; i < list.length; i++) {
-      var b = list[i];
-      var target = b[field] || "";
-      var t = normalizeBase(target);
-      var tNo = normalizeNoSpace(target);
-
-      if (t.indexOf(q) !== -1 || tNo.indexOf(qNo) !== -1) {
-        out.push(b);
-      }
+    var q = normalize(state.submittedQuery), qNoSpace = normalizeNoSpace(state.submittedQuery);
+    var source = cache[state.site] || [], result = [], i, target;
+    if (!q) return result;
+    for (i = 0; i < source.length; i++) {
+      target = source[i][state.field] || "";
+      if (normalize(target).indexOf(q) !== -1 || normalizeNoSpace(target).indexOf(qNoSpace) !== -1) result.push(source[i]);
     }
-    return out;
+    return result;
   }
 
-  function clearTable(msg) {
-    tbody.innerHTML = '<tr><td class="empty" colspan="4">' + msg + "</td></tr>";
+  function renderPager(totalPages) {
+    if (totalPages <= 1) { hide(pager); return; }
+    var first = Math.max(1, Math.min(state.currentPage - 2, totalPages - 4));
+    var last = Math.min(totalPages, first + 4), html = "", page;
+    html += '<button class="pagerBtn" data-page="prev"' + (state.currentPage === 1 ? " disabled" : "") + ">‹</button>";
+    for (page = first; page <= last; page++) html += '<button class="pagerBtn' + (page === state.currentPage ? " active" : "") + '" data-page="' + page + '">' + page + "</button>";
+    html += '<button class="pagerBtn" data-page="next"' + (state.currentPage === totalPages ? " disabled" : "") + ">›</button>";
+    pager.innerHTML = html; show(pager);
+    var buttons = pager.getElementsByTagName("button"), i;
+    for (i = 0; i < buttons.length; i++) buttons[i].onclick = function () {
+      var pageValue = this.getAttribute("data-page");
+      if (pageValue === "prev") state.currentPage--;
+      else if (pageValue === "next") state.currentPage++;
+      else state.currentPage = parseInt(pageValue, 10);
+      renderResults();
+    };
   }
 
-  function renderTable() {
-    var total = state.filtered.length;
-    resultInfo.innerHTML = "검색 결과: <b>" + total + "</b>권";
-
-    if (!state.submittedQuery) {
-      clearTable("도서관을 선택하고 검색해 주세요.");
-      hide(pager);
-      return;
-    }
-
-    if (total === 0) {
-      clearTable("검색 결과가 없습니다.");
-      hide(pager);
-      return;
-    }
-
-    var totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  function renderResults() {
+    var total = state.filtered.length, totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    var start, end, html = "", i, book;
     if (state.currentPage > totalPages) state.currentPage = totalPages;
-    if (state.currentPage < 1) state.currentPage = 1;
-
-    var start = (state.currentPage - 1) * PAGE_SIZE;
-    var end = Math.min(start + PAGE_SIZE, total);
-
-    var html = "";
-    var i;
+    resultCount.innerHTML = "검색 결과 " + total.toLocaleString() + "권";
+    resultMeta.innerHTML = state.site + "단지 · 검색어: " + escapeHtml(state.submittedQuery || "전체") + " · 검색 대상: " + FIELD_LABELS[state.field];
+    if (!state.submittedQuery) {
+      tbody.innerHTML = '<tr><td class="empty" colspan="4">도서관을 선택하고 검색해 주세요.</td></tr>';
+      hide(pager); return;
+    }
+    if (!total) {
+      tbody.innerHTML = '<tr><td class="empty" colspan="4">검색 결과가 없습니다.</td></tr>';
+      hide(pager); return;
+    }
+    start = (state.currentPage - 1) * PAGE_SIZE; end = Math.min(start + PAGE_SIZE, total);
     for (i = start; i < end; i++) {
-      var b = state.filtered[i];
-      html += "<tr>";
-      html += "<td>" + escapeHtml(b["서명"]) + "</td>";
-      html += '<td class="col-author">' + escapeHtml(b["저자"]) + "</td>";
-      html += '<td class="col-pub">' + escapeHtml(b["출판사"]) + "</td>";
-      html += "<td>" + escapeHtml(b["청구기호"]) + "</td>";
-      html += "</tr>";
+      book = state.filtered[i];
+      html += "<tr><td>" + escapeHtml(book["서명"]) + '</td><td class="col-author">' + escapeHtml(book["저자"]) + '</td><td class="col-pub">' + escapeHtml(book["출판사"]) + "</td><td>" + escapeHtml(book["청구기호"]) + "</td></tr>";
     }
-
-    tbody.innerHTML = html;
-
-    if (total > PAGE_SIZE) {
-      pageInfo.innerHTML = state.currentPage + " / " + totalPages;
-      prevBtn.disabled = state.currentPage === 1;
-      nextBtn.disabled = state.currentPage === totalPages;
-      show(pager);
-    } else {
-      hide(pager);
-    }
+    tbody.innerHTML = html; renderPager(totalPages);
   }
 
-  function escapeHtml(s) {
-    s = s == null ? "" : String(s);
-    return s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
-  function runSearch() {
-    var site = state.site;
-    var trimmedQ = trim(state.query);
-
-    if (!site) {
-      setError("3단지/4단지를 먼저 선택해 주세요.");
-      state.submittedQuery = "";
-      state.filtered = [];
-      state.currentPage = 1;
-      renderTable();
-      return;
-    }
-
-    if (trimmedQ === "") {
-      setError("검색어를 입력해주세요.");
-      state.submittedQuery = "";
-      state.filtered = [];
-      state.currentPage = 1;
-      renderTable();
-      return;
-    }
-
-    setError("");
-    setLoadError("");
-
-    // CSV 로드 후 필터
-    loadSiteIfNeeded(site, function (err) {
-      if (err) {
-        setLoadError(err.message);
-        state.submittedQuery = "";
-        state.filtered = [];
-        state.currentPage = 1;
-        renderHeader();
-        renderLoanInfo();
-        renderTable();
-        return;
-      }
-
-      state.submittedQuery = trimmedQ;
-      state.currentPage = 1;
-      state.filtered = filterBooks();
-
-      renderHeader();
-      renderLoanInfo();
-      renderTable();
+  function preload(site) {
+    setLoading(true); setMessage(loadErrorBox, "");
+    loadSite(site, function (error) {
+      setLoading(false);
+      if (error) setMessage(loadErrorBox, "로딩 오류: " + error.message);
+      renderStats(); renderResults();
     });
   }
 
-  // 이벤트
-  siteSelect.onchange = function () {
-    state.site = siteSelect.value;
-    state.submittedQuery = "";
-    state.currentPage = 1;
-    state.filtered = [];
+  function runSearch() {
+    state.query = trim(queryInput.value);
+    if (!state.query) { setMessage(errorBox, "검색어를 입력해주세요."); state.submittedQuery = ""; state.filtered = []; state.currentPage = 1; renderResults(); return; }
+    setMessage(errorBox, ""); setMessage(loadErrorBox, ""); setLoading(true);
+    loadSite(state.site, function (error) {
+      setLoading(false);
+      if (error) { setMessage(loadErrorBox, "로딩 오류: " + error.message); return; }
+      state.submittedQuery = state.query; state.currentPage = 1; state.filtered = filterBooks();
+      renderStats(); renderResults();
+    });
+  }
 
-    setError("");
-    setLoadError("");
-
-    renderHeader();
-    renderLoanInfo();
-    renderTable();
-
-    // 선택 즉시 미리 로드(프리로드)
-    if (state.site) {
-      loadSiteIfNeeded(state.site, function (err) {
-        if (err) setLoadError(err.message);
-        renderHeader();
-        renderLoanInfo();
-      });
-    }
+  var i;
+  for (i = 0; i < siteButtons.length; i++) siteButtons[i].onclick = function () {
+    state.site = this.getAttribute("data-site"); state.submittedQuery = ""; state.filtered = []; state.currentPage = 1;
+    updateButtons(siteButtons, "data-site", state.site); renderStats(); renderResults(); preload(state.site);
   };
-
-  fieldSelect.onchange = function () {
-    state.field = fieldSelect.value;
-    state.currentPage = 1;
-    if (state.submittedQuery) {
-      state.filtered = filterBooks();
-      renderTable();
-    }
+  for (i = 0; i < fieldButtons.length; i++) fieldButtons[i].onclick = function () {
+    state.field = this.getAttribute("data-field"); state.currentPage = 1;
+    updateButtons(fieldButtons, "data-field", state.field);
+    if (state.submittedQuery) state.filtered = filterBooks();
+    renderResults();
   };
+  searchBtn.onclick = runSearch;
+  queryInput.onkeyup = function (event) { event = event || window.event; if (event.keyCode === 13) runSearch(); };
 
-  queryInput.onkeyup = function (e) {
-    state.query = queryInput.value;
-    e = e || window.event;
-    if (e.keyCode === 13) runSearch();
-  };
-
-  searchBtn.onclick = function () {
-    state.query = queryInput.value;
-    runSearch();
-  };
-
-  prevBtn.onclick = function () {
-    state.currentPage -= 1;
-    renderTable();
-  };
-
-  nextBtn.onclick = function () {
-    state.currentPage += 1;
-    renderTable();
-  };
-
-  // 모바일/구형에서 hover가 안 되므로, 아이콘 탭으로 토글
-  tipIcon.onclick = function () {
-    // display 토글
-    if (tipBox.style.display === "block") tipBox.style.display = "none";
-    else tipBox.style.display = "block";
-  };
-
-  // 초기 렌더
-  renderHeader();
-  renderLoanInfo();
-  renderTable();
+  renderStats(); renderResults(); preload("4");
 })();
