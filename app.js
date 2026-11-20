@@ -60,10 +60,28 @@
 
   function mapRows(rows) {
     if (!rows.length) return [];
-    var headers = rows[0], books = [], r, c, item, line, cls, authorKey;
-    for (r = 1; r < rows.length; r++) {
+    var headers = [], books = [], r, c, item, line, cls, authorKey, start = 0, headerRow = -1, candidate;
+    while (start < rows.length && !trim(rows[start].join(""))) start++;
+    if (start === rows.length) return [];
+    // Sorting the sheet can move the header row below the books.
+    for (r = start; r < rows.length; r++) {
+      candidate = [];
+      for (c = 0; c < rows[r].length; c++) candidate.push(trim(rows[r][c]));
+      if (candidate.indexOf("서명") !== -1 && candidate.indexOf("저자") !== -1 && candidate.indexOf("출판사") !== -1) {
+        headers = candidate; headerRow = r; break;
+      }
+    }
+    if (headerRow === -1 && rows[start].length === 20 && /^\d+$/.test(trim(rows[start][0])) && trim(rows[start][1]) && trim(rows[start][2])) {
+      // CLIB exports can contain data only. Keep the first book as a data row.
+      headers = ["번호", "등록번호", "서명", "저자", "서명권차", "총서명", "저자기호", "별치기호", "분류기호", "청구권차", "복본기호", "ISBN", "딸림자료", "출판사", "출판년도", "발행지", "페이지", "크기", "가격", "등록일"];
+    } else if (headerRow === -1) {
+      throw new Error("장서 목록의 열 형식을 확인해 주세요. 서명·저자·출판사 열 이름 또는 CLIB 기본 20개 열이 필요합니다.");
+    }
+    for (r = start; r < rows.length; r++) {
+      if (r === headerRow) continue;
       line = rows[r]; item = {};
       for (c = 0; c < headers.length; c++) item[headers[c]] = line[c] || "";
+      if (trim(item["서명"]) === "서명" && trim(item["저자"]) === "저자" && trim(item["출판사"]) === "출판사") continue;
       if (!trim(item["서명"]) && !trim(item["저자"]) && !trim(item["출판사"])) continue;
       cls = trim(item["분류기호"]); authorKey = trim(item["저자기호"]);
       books.push({ id: "r" + r, "서명": trim(item["서명"]), "저자": trim(item["저자"]), "출판사": trim(item["출판사"]), "청구기호": trim(cls + (cls && authorKey ? " " : "") + authorKey) });
@@ -88,7 +106,10 @@
     xhr.onreadystatechange = function () {
       if (xhr.readyState !== 4) return;
       if (xhr.status >= 200 && xhr.status < 300) {
-        cache[site] = mapRows(parseCSV(xhr.responseText));
+        var books;
+        try { books = mapRows(parseCSV(xhr.responseText)); }
+        catch (error) { done(error); return; }
+        cache[site] = books;
         done(null, cache[site]);
       } else done(new Error("Google Sheets 장서 목록을 불러오지 못했습니다. (HTTP " + xhr.status + ")"));
     };
