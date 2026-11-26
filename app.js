@@ -3,7 +3,7 @@
   "use strict";
 
   var PAGE_SIZE = 10;
-  var GOOGLE_SHEET_ID = "1bLgsEAx6s_V7bJJY8cJMTvS2bHQbZue1jAO-e9fJgyU";
+  var GOOGLE_SHEET_ID = "1CL9PpIzpA3Q13skW2Ou-_xvNo9mqlmFdrtqOpzGhMNA";
   var CSV_URL_BY_SITE = {
     3: "https://docs.google.com/spreadsheets/d/" + GOOGLE_SHEET_ID + "/gviz/tq?tqx=out:csv&gid=1180448183",
     4: "https://docs.google.com/spreadsheets/d/" + GOOGLE_SHEET_ID + "/gviz/tq?tqx=out:csv&gid=1285026582"
